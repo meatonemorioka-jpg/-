@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>北津守　作業時間・重量管理</title>
+<style>
+*{box-sizing:border-box}
+:root{--blue:#1e3a5f;--line:#cbd5e1;--bg:#f1f5f9}
+body{font-family:Meiryo,Arial,sans-serif;margin:0;background:var(--bg);color:#1e293b}
+header{background:var(--blue);color:white;padding:10px 16px}
+header h1{font-size:1.35rem;margin:0 0 4px}
+header p{font-size:13px;margin:0}
+main{max-width:1400px;margin:auto;padding:8px}
+section,.card{background:white;padding:10px;margin:8px 0;border-radius:9px}
+input,select,button{font:inherit;padding:10px;margin:4px;border:1px solid var(--line);border-radius:7px}
+button{cursor:pointer;font-weight:bold;min-height:44px}
+.primary{background:#2563eb;color:white;border-color:#2563eb}
+.green{background:#15803d;color:white;border-color:#15803d}
+.orange{background:#d97706;color:white;border-color:#d97706}
+.red{background:#dc2626;color:white;border-color:#dc2626}
+/* iPad向け：作業者を3列に並べ、15名を5行で見渡す */
+#members.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch}
+.worker-card{margin:0;padding:8px;min-width:0;border:1px solid #dbe3ed;border-left:5px solid #94a3b8;display:flex;flex-direction:column;gap:6px}
+.worker-card.is-running{border-left-color:#16a34a}
+.worker-card.is-paused{border-left-color:#d97706}
+.worker-head{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.worker-name{font-size:18px;font-weight:800;overflow-wrap:anywhere;line-height:1.2;margin:0}
+.status{font-size:12px;background:#e2e8f0;padding:4px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.worker-select{width:100%;margin:0;min-height:40px;font-size:16px;padding:6px}
+.item-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.item-tab{background:#e2e8f0;color:#1e293b;border:1px solid #cbd5e1}
+.item-tab.active{background:#1e3a5f;color:white;border-color:#1e3a5f}
+.item-list{display:flex;flex-wrap:wrap;gap:6px}
+.item-chip{background:#dbeafe;border-radius:7px;padding:8px 10px;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:100%}
+.item-edit{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.item-edit input{width:105px;min-width:90px;padding:7px;margin:0}
+.item-edit button{padding:6px 8px;min-height:38px;margin:0}
+.item-chip.done{background:#dcfce7}
+.worker-meta{font-size:12px;color:#475569;line-height:1.25;overflow-wrap:anywhere}
+.worker-bottom{display:flex;align-items:center;gap:6px;min-width:0}
+.timer{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;margin:0;line-height:1.2}
+.worker-bottom .timer{flex:0 0 auto}
+.actions{display:flex;gap:6px;min-width:0}
+.worker-actions{flex:1}
+.actions button{flex:1;min-width:0;margin:0;padding:7px 5px;font-size:16px;min-height:44px;white-space:nowrap}
+.info{background:#f8fafc;padding:6px;border-radius:6px;margin:0}
+.muted{color:#64748b;font-size:13px}
+.tag{display:inline-block;background:#dbeafe;padding:8px;margin:4px;border-radius:5px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.history-actions{white-space:normal;min-width:180px}
+.history-actions button{margin:2px;padding:7px;font-size:12px;min-height:36px}
+th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;white-space:nowrap}
+th{background:#f8fafc}
+#memberForm,#itemForm{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#memberForm input,#itemForm input{flex:1;min-width:160px}
+@media(max-width:760px){
+  #members.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  header{padding:10px 12px}
+  header h1{font-size:1.2rem}
+  main{padding:6px}
+  section{padding:8px;margin:6px 0}
+  h2{font-size:1.05rem;margin:4px 0 8px}
+  .worker-name{font-size:17px}
+  .worker-card{padding:7px;gap:6px}
+  .worker-bottom{flex-wrap:wrap}
+  .worker-bottom .timer{font-size:20px}
+  .tablewrap{-webkit-overflow-scrolling:touch}
+  table{min-width:900px}
+  #export,#backup,#restore,#lineShare{width:100%;margin:4px 0}
+}
+@media(max-width:520px){
+  #members.grid{grid-template-columns:1fr}
+  #memberForm,#itemForm{display:flex;flex-direction:column;align-items:stretch}
+  #memberForm input,#itemForm input{width:100%;min-width:0}
+  .worker-card{padding:10px}
+  .worker-name{font-size:19px}
+  .worker-bottom{flex-wrap:nowrap}
+  .worker-bottom .timer{font-size:22px}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>北津守　作業時間・重量管理</h1>
+<p>複数メンバー・アイテム別タイムトラッキング</p>
+</header>
+<main>
+<section>
+<h2>作業者一覧・作業操作</h2>
+<div id="members" class="grid"></div>
+</section><section>
+<h2>1. メンバー登録</h2>
+<form id="memberForm">
+<input id="memberInput" placeholder="メンバー名" maxlength="60" required>
+<button class="primary">メンバー追加</button>
+</form>
+<div id="memberNames"></div>
+</section>
+
+<section>
+<h2>2. アイテム登録</h2>
+<form id="itemForm">
+<input id="itemInput" placeholder="アイテム名" maxlength="100" required>
+<input id="rawWeight" type="number" min="0" step="any" placeholder="原体重量 kg" required>
+<button class="primary">アイテム追加</button>
+</form>
+<div class="item-tabs" id="itemTabs">
+<button type="button" class="item-tab active" data-item-tab="all">すべて</button>
+<button type="button" class="item-tab" data-item-tab="open">作業中・未終了</button>
+<button type="button" class="item-tab" data-item-tab="done">作業終了</button>
+</div>
+<div id="items" class="item-list"></div>
+<p class="muted">製品重量は同じアイテムの最後の作業者が終了するときに入力します。</p>
+</section>
+
+
+
+<section>
+<h2>4. 作業履歴・データ出力</h2>
+<button id="export" class="green">Excel用CSV出力</button>
+<button id="backup">バックアップ保存</button>
+<button id="restore">バックアップ読込</button>
+<button id="lineShare" class="green" type="button">LINEで送る</button>
+<div id="lineProductPicker" class="card" hidden>
+  <h3>LINEで送る商品を選択</h3>
+  <p class="muted">選択した商品の作業履歴を、Excel出力と同じ「日別・商品別集計」形式で送信します。</p>
+  <div id="lineProductOptions"></div>
+  <button id="lineSelectAll" type="button">すべて選択</button>
+  <button id="lineSelectNone" type="button">すべて解除</button>
+  <button id="lineSendSelected" class="green" type="button">選択した集計をLINEで送る</button>
+  <button id="lineCancel" type="button">キャンセル</button>
+</div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+<div class="tablewrap">
+<table>
+<thead>
+<tr>
+<th>日付</th><th>メンバー</th><th>アイテム</th>
+<th>原体kg</th><th>製品kg</th><th>開始</th><th>終了</th>
+<th>休憩</th><th>実作業</th><th>状態</th><th>履歴編集</th>
+</tr>
+</thead>
+<tbody id="history"></tbody>
+</table>
+</div>
+</section>
+<p class="muted">データはブラウザに保存されます。定期的にバックアップしてください。</p>
+</main>
+
+<script>
+"use strict";
+
+const KEY="work_tracker_v3";
+const $=id=>document.getElementById(id);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,9);
+
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY));
+    if(d&&Array.isArray(d.members)&&Array.isArray(d.items)&&Array.isArray(d.sessions)){
+      return d;
+    }
+  }catch(e){}
+  return {members:[],items:[],sessions:[]};
+}
+
+let db=load();
+
+db.items.forEach(i=>{
+  i.rawWeight=Number(i.rawWeight)||0;
+  if(i.productWeight==null)i.productWeight=null;
+});
+
+db.sessions.forEach(s=>{
+  s.rawWeight=Number(s.rawWeight)||0;
+  s.productWeight=s.productWeight==null||s.productWeight===""
+    ?null:Number(s.productWeight);
+  s.pauseMs=Number(s.pauseMs)||0;
+  if(!("pauseStartedAt" in s))s.pauseStartedAt=null;
+});
+// 旧データに商品側の製品重量がない場合、作業履歴から引き継ぐ
+ db.items.forEach(i=>{
+  if(i.productWeight==null){
+    const found=[...db.sessions].reverse().find(s=>s.itemId===i.id&&s.productWeight!=null);
+    if(found)i.productWeight=Number(found.productWeight);
+  }
+});
+
+// 読み込み時点で、保存済みの過去履歴の商品名も現在の商品名・表記統一ルールに合わせ、変更を保存する
+const historyNamesChanged = applyCanonicalNamesToHistory();
+if (historyNamesChanged) save();
+
+function save(){
+  try{
+    localStorage.setItem(KEY,JSON.stringify(db));
+    return true;
+  }catch(e){
+    alert("保存できません。ブラウザの保存領域を確認してください。");
+    return false;
+  }
+}
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+function day(v){
+  const d=new Date(v);
+  if(!Number.isFinite(d.getTime()))return "";
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function clock(v){
+  if(!v)return "—";
+  const d=new Date(v);
+  if(!Number.isFinite(d.getTime()))return "—";
+  return d.toLocaleTimeString("ja-JP",{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+function dt(v){return v?day(v)+" "+clock(v):"—";}
+
+function duration(ms){
+  ms=Math.max(0,Math.floor(ms/1000));
+  return Math.floor(ms/3600)+":"+String(Math.floor(ms%3600/60)).padStart(2,"0")+":"+String(ms%60).padStart(2,"0");
+}
+
+function fmtWeight(v){
+  return v==null||v===""?"未入力":Number(v).toLocaleString("ja-JP",{maximumFractionDigits:4});
+}
+
+function activeFor(memberId){
+  return db.sessions.find(s=>s.memberId===memberId&&(s.status==="running"||s.status==="paused"));
+}
+
+function pause(s,now=Date.now()){
+  return Math.max(0,Number(s.pauseMs)||0)+
+    (s.status==="paused"&&s.pauseStartedAt?Math.max(0,now-Date.parse(s.pauseStartedAt)):0);
+}
+
+function work(s,now=Date.now()){
+  // 終了後に手動修正した作業時間があれば、集計・表示ともその値を使用
+  if(s.editedWorkMs!=null && Number.isFinite(Number(s.editedWorkMs)))return Math.max(0,Number(s.editedWorkMs));
+  const start=Date.parse(s.timerStartAt||s.startAt);
+  const end=s.endAt?Date.parse(s.endAt):now;
+  if(!Number.isFinite(start)||!Number.isFinite(end))return 0;
+  return Math.max(0,end-start-pause(s,now));
+}
+
+function statusLabel(status){
+  return status==="running"?"作業中":status==="paused"?"休憩中":"終了";
+}
+
+let itemTab="all";
+
+function itemIsDone(item){
+  const related=db.sessions.filter(s=>s.itemId===item.id);
+  return related.length>0 && related.every(s=>s.status==="completed");
+}
+
+function activeItem(itemId){
+  return db.sessions.some(s=>s.itemId===itemId&&(s.status==="running"||s.status==="paused"));
+}
+
+function render(){
+  $("memberNames").innerHTML=db.members.map(m=>
+    `<span class="tag">${esc(m.name)}</span>`
+  ).join("")||'<span class="muted">メンバー未登録</span>';
+
+  const visibleItems=db.items.filter(i=>{
+    if(itemTab==="done")return itemIsDone(i);
+    if(itemTab==="open")return !itemIsDone(i);
+    return true;
+  });
+  $("items").innerHTML=visibleItems.map(i=>`
+    <div class="item-chip ${itemIsDone(i)?"done":""}">
+      <span><b>${esc(i.name)}</b><br><small>${itemIsDone(i)?'作業終了':activeItem(i.id)?'作業中':'未終了'}</small></span>
+      <div class="item-edit">
+        <label>原料kg <input type="number" min="0" step="any" data-edit-raw="${esc(i.id)}" value="${esc(i.rawWeight)}" aria-label="${esc(i.name)} 原料重量"></label>
+        <label>製品kg <input type="number" min="0" step="any" data-edit-product="${esc(i.id)}" value="${i.productWeight==null?'':esc(i.productWeight)}" placeholder="未入力" aria-label="${esc(i.name)} 製品重量"></label>
+        <button type="button" class="primary" data-save-weight="${esc(i.id)}">重量を保存</button>
+      </div>
+      <button type="button" data-delete-item="${esc(i.id)}" aria-label="${esc(i.name)}を削除">削除</button>
+    </div>
+  `).join("")||'<span class="muted">このタブに表示するアイテムはありません。</span>';
+  document.querySelectorAll("[data-item-tab]").forEach(b=>b.classList.toggle("active",b.dataset.itemTab===itemTab));
+
+  $("members").innerHTML=db.members.map(m=>{
+    const s=activeFor(m.id);
+    const options=db.items.map(i=>`
+      <option value="${esc(i.id)}" ${s&&s.itemId===i.id?"selected":""}>
+        ${esc(i.name)}
+      </option>
+    `).join("");
+    const stateClass=s?(s.status==="running"?"is-running":"is-paused"):"";
+
+    return `<article class="card worker-card ${stateClass}">
+      <div class="worker-head">
+        <h3 class="worker-name">${esc(m.name)}</h3>
+        <span class="status">${s?statusLabel(s.status):"待機中"}</span>
+      </div>
+      ${s?`
+        <div class="worker-meta">${esc(s.itemName)} ・ 原体 ${fmtWeight(s.rawWeight)}kg ・ 製品 ${fmtWeight(s.productWeight)}kg</div>
+        <div class="worker-bottom">
+          <div class="timer" data-timer="${esc(s.id)}">${duration(work(s))}</div>
+          <div class="actions worker-actions">
+            ${s.status==="running"
+              ?`<button class="orange" data-action="pause" data-id="${esc(s.id)}">休憩</button>`
+              :`<button class="green" data-action="resume" data-id="${esc(s.id)}">再開</button>`}
+            <button class="red" data-action="finish" data-id="${esc(s.id)}">終了</button>
+          </div>
+        </div>
+      `:`
+        <select class="worker-select" data-select="${esc(m.id)}">
+          <option value="">アイテムを選択</option>${options}
+        </select>
+        <div class="actions">
+          <button class="primary" data-action="start" data-id="${esc(m.id)}" ${db.items.length?"":"disabled"}>開始</button>
+          <button data-action="delete-member" data-id="${esc(m.id)}">削除</button>
+        </div>
+      `}
+    </article>`;
+  }).join("")||"<p>メンバーを登録してください。</p>";
+
+  $("history").innerHTML=[...db.sessions]
+    .sort((a,b)=>Date.parse(b.startAt)-Date.parse(a.startAt))
+    .map(s=>`
+      <tr>
+        <td>${day(s.startAt)}</td>
+        <td>${esc(s.memberName)}</td>
+        <td>${esc(s.itemName)}</td>
+        <td>${fmtWeight(s.rawWeight)}</td>
+        <td>${fmtWeight(s.productWeight)}</td>
+        <td>${clock(s.startAt)}</td>
+        <td>${clock(s.endAt)}</td>
+        <td>${duration(pause(s))}</td>
+        <td>${duration(work(s))}</td>
+        <td>${statusLabel(s.status)}</td>
+        <td class="history-actions">
+          <button type="button" data-edit-product-history="${esc(s.id)}">商品編集</button>
+          <button type="button" data-edit-worker-history="${esc(s.id)}">担当者・時間編集</button>
+        </td>
+      </tr>
+    `).join("");
+}
+
+// 過去履歴の商品単位・担当者単位の編集
+function parseDuration(text){
+  const m=String(text||"").trim().match(/^(\d+):([0-5]?\d):([0-5]?\d)$/);
+  if(!m)return null;
+  return ((Number(m[1])*3600)+(Number(m[2])*60)+Number(m[3]))*1000;
+}
+function localDateTimeInput(value){
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime()))return "";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function readDateTime(text){
+  const d=new Date(text);
+  return text && Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+function restoreDb(snapshot){
+  db=snapshot;
+  render();
+}
+
+$("history").addEventListener("click",e=>{
+  const productButton=e.target.closest("[data-edit-product-history]");
+  const workerButton=e.target.closest("[data-edit-worker-history]");
+  if(!productButton&&!workerButton)return;
+  const sessionId=(productButton||workerButton).dataset.editProductHistory || (productButton||workerButton).dataset.editWorkerHistory;
+  const s=db.sessions.find(x=>x.id===sessionId);
+  if(!s)return;
+
+  if(productButton){
+    const item=db.items.find(i=>i.id===s.itemId);
+    const oldName=String((item&&item.name)||s.itemName||"");
+    const oldRaw=item?item.rawWeight:s.rawWeight;
+    const oldProduct=item?item.productWeight:s.productWeight;
+    const name=prompt("この商品の過去履歴に反映する商品名を入力してください。",oldName);
+    if(name===null)return;
+    if(!name.trim()){alert("商品名を入力してください。");return;}
+    const rawText=prompt("原料重量 kg（同じ商品IDの過去履歴すべてに反映）",String(oldRaw??0));
+    if(rawText===null)return;
+    if(rawText.trim()===""||!Number.isFinite(Number(rawText))||Number(rawText)<0){alert("原料重量は0以上の数値で入力してください。");return;}
+    const productText=prompt("製品重量 kg（未入力にする場合は空欄）",oldProduct==null?"":String(oldProduct));
+    if(productText===null)return;
+    if(productText.trim()!==""&&(!Number.isFinite(Number(productText))||Number(productText)<0)){alert("製品重量は空欄、または0以上の数値で入力してください。");return;}
+
+    const snapshot=JSON.parse(JSON.stringify(db));
+    const oldNormalizedName=normalizeProductName(oldName);
+    const newName=name.trim();
+    const relatedItems=db.items.filter(candidate =>
+      candidate.id===s.itemId || normalizeProductName(candidate.name)===oldNormalizedName
+    );
+    const relatedItemIds=new Set(relatedItems.map(candidate=>candidate.id));
+    const relatedSessions=db.sessions.filter(session =>
+      relatedItemIds.has(session.itemId) || normalizeProductName(session.itemName)===oldNormalizedName
+    );
+
+    // 表記違いの別ID商品も同じ名前に統一し、過去履歴・CSV出力に反映
+    relatedItems.forEach(candidate=>{ candidate.name=newName; });
+    relatedSessions.forEach(session=>{ session.itemName=newName; });
+
+    // 重量は選択した商品IDにだけ反映し、別ID商品の重量を誤って上書きしない
+    if(item){
+      item.rawWeight=Number(rawText);
+      item.productWeight=productText.trim()===""?null:Number(productText);
+    }
+    const selectedItemSessions=db.sessions.filter(session=>session.itemId===s.itemId);
+    (selectedItemSessions.length?selectedItemSessions:[s]).forEach(session=>{
+      session.rawWeight=Number(rawText);
+      session.productWeight=productText.trim()===""?null:Number(productText);
+    });
+    if(save()){render();alert("商品名は表記違いを含む過去履歴に反映しました。重量は選択した商品IDの履歴に反映しました。");}
+    else restoreDb(snapshot);
+    return;
+  }
+
+  if(workerButton){
+    if(s.status!=="completed"){
+      alert("担当者・日時の編集は終了済みの作業履歴のみ対応しています。");return;
+    }
+    const currentMember=s.memberName||"";
+    const choices=db.members.map((m,i)=>`${i+1}. ${m.name}`).join("\n");
+    const currentIndex=Math.max(0,db.members.findIndex(m=>m.id===s.memberId));
+    const memberAnswer=prompt("担当者を番号で選択してください。\n"+choices+"\n\n現在："+currentMember+"\n番号を入力。名前を直接入力することもできます。",String(currentIndex+1));
+    if(memberAnswer===null)return;
+    const memberIndex=/^\d+$/.test(memberAnswer.trim())?Number(memberAnswer.trim())-1:-1;
+    const selectedMember=memberIndex>=0?db.members[memberIndex]:null;
+    const memberName=(selectedMember?selectedMember.name:memberAnswer.trim());
+    if(!memberName){alert("担当者名を入力してください。");return;}
+    const dateAnswer=prompt("作業日（YYYY-MM-DD）",day(s.startAt));
+    if(dateAnswer===null)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateAnswer)||!Number.isFinite(new Date(dateAnswer+"T00:00:00").getTime())){alert("作業日は YYYY-MM-DD 形式で入力してください。");return;}
+    const startAnswer=prompt("開始時刻（HH:MM）",clock(s.startAt).slice(0,5));
+    if(startAnswer===null)return;
+    const endAnswer=prompt("終了時刻（HH:MM）",clock(s.endAt).slice(0,5));
+    if(endAnswer===null)return;
+    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(startAnswer.trim())||!/^([01]\d|2[0-3]):[0-5]\d$/.test(endAnswer.trim())){alert("開始・終了時刻は HH:MM 形式で入力してください。");return;}
+    const startIso=readDateTime(dateAnswer+"T"+startAnswer.trim());
+    let endIso=readDateTime(dateAnswer+"T"+endAnswer.trim());
+    if(!startIso||!endIso){alert("日付または時刻が正しくありません。");return;}
+    if(Date.parse(endIso)<Date.parse(startIso)){
+      const nextDay=new Date(Date.parse(endIso)+24*60*60*1000); endIso=nextDay.toISOString();
+    }
+    const currentDuration=duration(work(s));
+    const durationAnswer=prompt("実作業時間（HH:MM:SS）",currentDuration);
+    if(durationAnswer===null)return;
+    const editedMs=parseDuration(durationAnswer);
+    if(editedMs===null){alert("実作業時間は HH:MM:SS 形式で入力してください。例：01:25:30");return;}
+
+    const snapshot=JSON.parse(JSON.stringify(db));
+    s.memberId=selectedMember?selectedMember.id:(s.memberId||"");
+    s.memberName=memberName;
+    s.startAt=startIso;
+    s.timerStartAt=startIso;
+    s.endAt=endIso;
+    s.status="completed";
+    s.pauseMs=0;
+    s.pauseStartedAt=null;
+    s.editedWorkMs=editedMs;
+    if(save()){render();alert("担当者・作業日時・実作業時間を保存しました。Excel出力にも反映されます。");}
+    else restoreDb(snapshot);
+  }
+});
+
+$("memberForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const name=$("memberInput").value.trim();
+  if(!name)return;
+  if(db.members.some(m=>m.name.toLowerCase()===name.toLowerCase())){
+    alert("同じ名前のメンバーが登録されています。");
+    return;
+  }
+  db.members.push({id:uid(),name});
+  if(save()){
+    $("memberInput").value="";
+    render();
+  }else db.members.pop();
+});
+
+$("itemForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const name=$("itemInput").value.trim();
+  const raw=$("rawWeight").value;
+  if(!name||raw===""){
+    alert("アイテム名と原体重量を入力してください。");
+    return;
+  }
+  const rawWeight=Number(raw);
+  if(!Number.isFinite(rawWeight)||rawWeight<0){
+    alert("原体重量は0以上の数値で入力してください。");
+    return;
+  }
+  if(db.items.some(i=>i.name.toLowerCase()===name.toLowerCase())){
+    alert("同じ名前のアイテムが登録されています。");
+    return;
+  }
+  db.items.push({id:uid(),name,rawWeight,productWeight:null});
+  if(save()){
+    $("itemInput").value="";
+    $("rawWeight").value="";
+    render();
+  }else db.items.pop();
+});
+
+$("items").addEventListener("click",e=>{
+  const saveButton=e.target.closest("[data-save-weight]");
+  if(saveButton){
+    const id=saveButton.dataset.saveWeight;
+    const item=db.items.find(i=>i.id===id);
+    const rawInput=document.querySelector(`[data-edit-raw="${CSS.escape(id)}"]`);
+    const productInput=document.querySelector(`[data-edit-product="${CSS.escape(id)}"]`);
+    if(!item||!rawInput||!productInput)return;
+    const rawText=rawInput.value.trim();
+    const productText=productInput.value.trim();
+    if(rawText===""||!Number.isFinite(Number(rawText))||Number(rawText)<0){
+      alert("原料重量は0以上の数値で入力してください。");return;
+    }
+    if(productText!==""&&(!Number.isFinite(Number(productText))||Number(productText)<0)){
+      alert("製品重量は空欄、または0以上の数値で入力してください。");return;
+    }
+    const oldItem={...item};
+    const oldSessions=db.sessions.filter(s=>s.itemId===id).map(s=>({...s}));
+    item.rawWeight=Number(rawText);
+    item.productWeight=productText===""?null:Number(productText);
+    db.sessions.filter(s=>s.itemId===id).forEach(s=>{
+      s.rawWeight=item.rawWeight;
+      s.productWeight=item.productWeight;
+    });
+    if(save()){
+      render();
+      alert("原料重量・製品重量を保存しました。");
+    }else{
+      Object.assign(item,oldItem);
+      oldSessions.forEach(old=>{
+        const session=db.sessions.find(s=>s.id===old.id);
+        if(session)Object.assign(session,old);
+      });
+    }
+    return;
+  }
+  const b=e.target.closest("[data-delete-item]");
+  if(!b)return;
+  const id=b.dataset.deleteItem;
+  if(db.sessions.some(s=>s.itemId===id&&(s.status==="running"||s.status==="paused"))){
+    alert("作業中または休憩中のアイテムは削除できません。作業を終了してから削除してください。");
+    return;
+  }
+  const index=db.items.findIndex(i=>i.id===id);
+  if(index<0)return;
+  const hasHistory=db.sessions.some(s=>s.itemId===id);
+  const message=hasHistory
+    ? "この商品を一覧から削除しますか？\n過去の作業履歴と出力データは残ります。"
+    : "この商品を削除しますか？";
+  if(!confirm(message))return;
+  const removed=db.items.splice(index,1)[0];
+  if(save())render();
+  else db.items.splice(index,0,removed);
+});
+
+$("itemTabs").addEventListener("click",e=>{
+  const b=e.target.closest("[data-item-tab]");
+  if(!b)return;
+  itemTab=b.dataset.itemTab;
+  render();
+});
+
+$("members").addEventListener("click",e=>{
+  const b=e.target.closest("[data-action]");
+  if(!b)return;
+  const action=b.dataset.action;
+  const id=b.dataset.id;
+
+  if(action==="delete-member"){
+    if(activeFor(id)){
+      alert("作業中のメンバーは削除できません。");
+      return;
+    }
+    if(!confirm("メンバーを削除しますか？作業履歴は残ります。"))return;
+    const index=db.members.findIndex(m=>m.id===id);
+    if(index<0)return;
+    const removed=db.members.splice(index,1)[0];
+    if(save())render();
+    else db.members.splice(index,0,removed);
+    return;
+  }
+
+  if(action==="start"){
+    const m=db.members.find(m=>m.id===id);
+    const select=b.closest(".card").querySelector("[data-select]");
+    const item=db.items.find(i=>i.id===select.value);
+    if(!item){alert("アイテムを選択してください。");return;}
+    if(activeFor(id)){alert("すでに作業中です。");return;}
+    const now=new Date().toISOString();
+    const session={
+      id:uid(),memberId:m.id,memberName:m.name,
+      itemId:item.id,itemName:item.name,
+      rawWeight:item.rawWeight,productWeight:item.productWeight==null?null:Number(item.productWeight),
+      startAt:now,
+      timerStartAt:now,
+      endAt:null,
+      pauseMs:0,pauseStartedAt:null,status:"running"
+    };
+    db.sessions.push(session);
+    if(save())render();
+    else db.sessions.pop();
+    return;
+  }
+
+  if(action==="pause"||action==="resume"){
+    const s=db.sessions.find(s=>s.id===id);
+    if(!s)return;
+    const old={...s};
+    const now=new Date().toISOString();
+    if(action==="pause"&&s.status==="running"){
+      s.status="paused";
+      s.pauseStartedAt=now;
+    }else if(action==="resume"&&s.status==="paused"){
+      s.pauseMs=pause(s,Date.parse(now));
+      s.pauseStartedAt=null;
+      s.status="running";
+    }else return;
+    if(save())render();
+    else Object.assign(s,old);
+    return;
+  }
+
+  if(action==="finish")finish(id);
+});
+
+function finish(id){
+  const s=db.sessions.find(s=>s.id===id);
+  if(!s||!["running","paused"].includes(s.status))return;
+
+  // 同じアイテムで作業中・休憩中の人数を確認
+  const sameItemActive=db.sessions.filter(x=>
+    x.itemId===s.itemId&&
+    (x.status==="running"||x.status==="paused")
+  );
+  const isLast=sameItemActive.length===1;
+  let productWeight=null;
+
+  // 最後の作業者だけ製品重量を入力
+  if(isLast){
+    const answer=prompt(
+      "このアイテムの最後の作業者です。\n"+
+      "アイテム："+s.itemName+"\n"+
+      "製品重量をkgで入力してください。"
+    );
+    if(answer===null)return;
+    if(answer.trim()===""||!Number.isFinite(Number(answer))||Number(answer)<0){
+      alert("製品重量は0以上の数値で入力してください。");
+      return;
+    }
+    productWeight=Number(answer);
+  }
+
+  if(!confirm(
+    "作業を終了しますか？\n"+
+    (isLast
+      ?"製品重量："+productWeight+" kg"
+      :"製品重量は最後の作業者が入力します。")
+  ))return;
+
+  const oldSessions=db.sessions.map(x=>({...x}));
+  const now=new Date().toISOString();
+
+  if(s.status==="paused"){
+    s.pauseMs=pause(s,Date.parse(now));
+    s.pauseStartedAt=null;
+  }
+  s.endAt=now;
+  s.status="completed";
+
+  if(isLast){
+    const item=db.items.find(i=>i.id===s.itemId);
+    if(item)item.productWeight=productWeight;
+    // 同じアイテムの全履歴に製品重量を反映
+    db.sessions.filter(x=>x.itemId===s.itemId).forEach(x=>{
+      x.productWeight=productWeight;
+    });
+  }
+
+  if(save())render();
+  else{
+    db.sessions=oldSessions;
+    render();
+  }
+}
+
+function download(content,name,type){
+  const url=URL.createObjectURL(new Blob([content],{type}));
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function csvCell(v){
+  return '"'+String(v??"").replace(/"/g,'""')+'"';
+}
+
+// 商品名の表記ゆれを統一：全角/半角、ひらがな/カタカナ、空白・記号の違いを吸収
+function normalizeProductName(value){
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("ja-JP")
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/[\s\u3000・･_＿\-‐‑‒–—―ー.．,，、/／\\()（）［］【】「」『』]/g, "")
+    .trim();
+}
+
+// 商品IDのある履歴は商品マスター名を優先。商品IDがない古い履歴も、
+// 商品マスター・全履歴を通して同じ正規化名の代表名に統一する。
+function applyCanonicalNamesToHistory(){
+  const canonicalByNormalizedName = new Map();
+  const rememberName = value => {
+    const name = String(value ?? "").trim();
+    const normalized = normalizeProductName(name);
+    if (normalized && !canonicalByNormalizedName.has(normalized)) {
+      canonicalByNormalizedName.set(normalized, name);
+    }
+  };
+  // 商品マスターの名前を優先して代表名にする
+  db.items.forEach(item => rememberName(item.name));
+  // 商品マスターにない過去履歴だけの商品名も対象に含める
+  db.sessions.forEach(session => rememberName(session.itemName));
+
+  let changed = false;
+  db.sessions.forEach(session => {
+    const item = db.items.find(candidate => candidate.id === session.itemId);
+    const sourceName = String((item && item.name) || session.itemName || "").trim();
+    const normalized = normalizeProductName(sourceName);
+    const canonical = canonicalByNormalizedName.get(normalized) || sourceName;
+    if (canonical && session.itemName !== canonical) {
+      session.itemName = canonical;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+$("export").addEventListener("click",()=>{
+  // 商品マスターと全過去履歴から、正規化名ごとの代表表示名を作る。
+  // itemIdがない古い履歴も除外せず、表記ゆれを含めて集計する。
+  const canonicalByNormalizedName = new Map();
+  const rememberName = value => {
+    const name = String(value ?? "").trim();
+    const normalized = normalizeProductName(name);
+    if (normalized && !canonicalByNormalizedName.has(normalized)) {
+      canonicalByNormalizedName.set(normalized, name);
+    }
+  };
+  db.items.forEach(item => rememberName(item.name));
+  db.sessions.forEach(session => rememberName(session.itemName));
+
+  const summary = new Map();
+  db.sessions.forEach(s => {
+    const date = day(s.startAt);
+    const item = db.items.find(i => i.id === s.itemId);
+    const sourceName = String((item && item.name) || s.itemName || "商品名未設定").trim();
+    const normalizedName = normalizeProductName(sourceName) || normalizeProductName("商品名未設定");
+    const itemName = canonicalByNormalizedName.get(normalizedName) || sourceName;
+    const key = JSON.stringify([normalizedName, date]);
+
+    if (!summary.has(key)) {
+      summary.set(key, {
+        itemName, date, normalizedName, members: new Set(), seconds: 0,
+        rawWeightsByItem: new Map(), productWeightsByItem: new Map()
+      });
+    }
+    const g = summary.get(key);
+    g.members.add(String(s.memberId || s.memberName || "名称未設定"));
+    g.seconds += work(s) / 1000;
+
+    // 同じ商品IDに複数の作業者がいても重量は1回だけ計上する。
+    // 商品IDのない過去履歴は、正規化商品名を代わりのキーにする。
+    const weightKey = String(s.itemId || normalizedName);
+    if (item) {
+      g.rawWeightsByItem.set(weightKey, Number(item.rawWeight) || 0);
+      if (item.productWeight != null && Number.isFinite(Number(item.productWeight))) {
+        g.productWeightsByItem.set(weightKey, Number(item.productWeight));
+      } else if (s.productWeight != null && Number.isFinite(Number(s.productWeight))) {
+        g.productWeightsByItem.set(weightKey, Number(s.productWeight));
+      }
+    } else {
+      if (!g.rawWeightsByItem.has(weightKey)) g.rawWeightsByItem.set(weightKey, Number(s.rawWeight) || 0);
+      if (s.productWeight != null && Number.isFinite(Number(s.productWeight))) {
+        g.productWeightsByItem.set(weightKey, Number(s.productWeight));
+      }
+    }
+  });
+
+  const sorted = [...summary.values()].map(g => ({
+    ...g,
+    rawWeight: [...g.rawWeightsByItem.values()].reduce((sum, v) => sum + (Number(v) || 0), 0),
+    productWeight: g.productWeightsByItem.size
+      ? [...g.productWeightsByItem.values()].reduce((sum, v) => sum + (Number(v) || 0), 0)
+      : null
+  })).sort((a, b) =>
+    a.normalizedName.localeCompare(b.normalizedName, "ja") ||
+    a.date.localeCompare(b.date)
+  );
+
+  if (sorted.length === 0) {
+    alert("出力できる作業履歴がありません。");
+    return;
+  }
+
+  const rows = [[
+    "商品名", "日付", "合計人数", "総時間(h)", "一人当たり時間(h/人)",
+    "原料重量(kg)", "製品重量(kg)", "歩留り(%)", "人時生産量(kg/人時)"
+  ]];
+  sorted.forEach(g => {
+    const hours = g.seconds / 3600;
+    const people = g.members.size;
+    const raw = g.rawWeight;
+    const product = g.productWeight == null ? null : Number(g.productWeight);
+    const yieldRate = raw > 0 && product !== null && Number.isFinite(product)
+      ? (product / raw * 100).toFixed(2) : "";
+    const manHour = hours > 0 && product !== null && Number.isFinite(product)
+      ? (product / hours).toFixed(4) : "";
+    rows.push([
+      g.itemName, g.date, people, hours.toFixed(4),
+      people > 0 ? (hours / people).toFixed(4) : "",
+      raw, product === null ? "" : product, yieldRate, manHour
+    ]);
+  });
+
+  const csv = "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+  download(csv, "商品名優先_商品別集計_" + day(new Date()) + ".csv", "text/csv;charset=utf-8;");
+});
+
+$("backup").addEventListener("click",()=>{
+  download(
+    JSON.stringify(db,null,2),
+    "作業時間バックアップ_"+day(new Date())+".json",
+    "application/json;charset=utf-8"
+  );
+});
+
+$("restore").addEventListener("click",()=>$("fileInput").click());
+
+// LINE共有：商品を選び、Excel出力と同じ日別・商品別集計を送信する
+const linePicker=$("lineProductPicker");
+
+function getLineProductOptions(){
+  const products=new Map();
+  db.sessions.forEach(s=>{
+    const key=String(s.itemId||s.itemName||"");
+    if(!key)return;
+    if(!products.has(key))products.set(key,String(s.itemName||"名称未設定"));
+  });
+  return [...products.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"));
+}
+
+$("lineShare").addEventListener("click",()=>{
+  const products=getLineProductOptions();
+  if(!products.length){
+    alert("送信できる作業履歴がありません。");
+    return;
+  }
+  $("lineProductOptions").innerHTML=products.map(([key,name])=>
+    `<label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #e2e8f0;">
+      <input type="checkbox" class="line-product-check" value="${esc(key)}" checked style="width:20px;height:20px;">
+      <span>${esc(name)}</span>
+    </label>`
+  ).join("");
+  linePicker.hidden=false;
+  linePicker.scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+
+$("lineSelectAll").addEventListener("click",()=>{
+  document.querySelectorAll(".line-product-check").forEach(c=>c.checked=true);
+});
+$("lineSelectNone").addEventListener("click",()=>{
+  document.querySelectorAll(".line-product-check").forEach(c=>c.checked=false);
+});
+$("lineCancel").addEventListener("click",()=>{linePicker.hidden=true;});
+
+$("lineSendSelected").addEventListener("click",async()=>{
+  const selected=new Set([...document.querySelectorAll(".line-product-check:checked")].map(c=>c.value));
+  if(!selected.size){
+    alert("送信する商品を1つ以上選択してください。");
+    return;
+  }
+  const sessions=db.sessions.filter(s=>selected.has(String(s.itemId||s.itemName||"")));
+  const summary={};
+  sessions.forEach(s=>{
+    const date=day(s.startAt);
+    const key=JSON.stringify([date,String(s.itemId||s.itemName)]);
+    const item=db.items.find(i=>i.id===s.itemId);
+    if(!summary[key])summary[key]={
+      date,itemName:s.itemName,members:new Set(),seconds:0,
+      rawWeight:item?Number(item.rawWeight)||0:Number(s.rawWeight)||0,
+      productWeight:item&&item.productWeight!=null?Number(item.productWeight):s.productWeight
+    };
+    const g=summary[key];
+    g.members.add(String(s.memberId||s.memberName));
+    g.seconds+=work(s)/1000;
+    if(item){
+      g.rawWeight=Number(item.rawWeight)||0;
+      if(item.productWeight!=null)g.productWeight=Number(item.productWeight);
+    }
+    if(s.productWeight!=null&&g.productWeight==null)g.productWeight=Number(s.productWeight);
+  });
+
+  const lines=["【北津守 作業時間・重量管理】","日別・商品別集計",""];
+  Object.values(summary).sort((a,b)=>a.date.localeCompare(b.date)||a.itemName.localeCompare(b.itemName,"ja")).forEach(g=>{
+    const hours=g.seconds/3600;
+    const people=g.members.size;
+    const raw=g.rawWeight;
+    const product=g.productWeight==null?null:Number(g.productWeight);
+    const yieldRate=raw>0&&product!==null&&Number.isFinite(product)?(product/raw*100).toFixed(2)+"%":"未入力";
+    const manHour=hours>0&&product!==null&&Number.isFinite(product)?(product/hours).toFixed(4):"未入力";
+    lines.push(
+      `【${g.date}｜${g.itemName}】`,
+      `合計人数：${people}人`,
+      `総時間：${hours.toFixed(4)}時間`,
+      `一人当たり時間：${people>0?(hours/people).toFixed(4):"0.0000"}時間`,
+      `原料重量：${raw} kg`,
+      `生産量・製品重量：${product===null?"未入力":product+" kg"}`,
+      `歩留り：${yieldRate}`,
+      `人時生産量：${manHour}${manHour==="未入力"?"":" kg/人時"}`,
+      ""
+    );
+  });
+  const message=lines.join("\n");
+  // スマートフォンでは共有メニューからLINEを選択できます。
+  if(navigator.share){
+    try{
+      await navigator.share({title:"日別・商品別集計",text:message});
+      linePicker.hidden=true;
+      return;
+    }catch(err){
+      if(err&&err.name==="AbortError")return;
+    }
+  }
+  // 共有API非対応環境ではLINEの送信画面を開きます。
+  const lineUrl="https://line.me/R/msg/text/?"+encodeURIComponent(message);
+  window.open(lineUrl,"_blank","noopener,noreferrer");
+  linePicker.hidden=true;
+});
+
+$("fileInput").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  // File.text() が使えない環境もあるため FileReader で読み込む。
+  const reader = new FileReader();
+  reader.onload = () => {
+    let oldDb = db;
+    try {
+      // UTF-8 BOM が付いた JSON バックアップにも対応
+      const text = String(reader.result || "").replace(/^\uFEFF/, "").trim();
+      const parsed = JSON.parse(text);
+      // 一部のバックアップ形式で data の中に本体がある場合にも対応
+      const d = parsed && parsed.data && !parsed.members ? parsed.data : parsed;
+
+      if (!d || !Array.isArray(d.members) || !Array.isArray(d.items) || !Array.isArray(d.sessions)) {
+        throw new Error("バックアップ内に members / items / sessions が見つかりません。");
+      }
+
+      if (!confirm("現在のデータをバックアップの内容に置き換えますか？\n読み込み前に、必要なら現在のデータをバックアップ保存してください。")) return;
+
+      const nextDb = {
+        members: d.members.map(m => ({ ...m, id: String(m.id || uid()), name: String(m.name || "名称未設定") })),
+        items: d.items.map(i => ({
+          ...i,
+          id: String(i.id || uid()),
+          name: String(i.name || "名称未設定"),
+          rawWeight: Number(i.rawWeight) || 0,
+          productWeight: i.productWeight == null || i.productWeight === "" || !Number.isFinite(Number(i.productWeight))
+            ? null : Number(i.productWeight)
+        })),
+        sessions: d.sessions.map(s => ({
+          ...s,
+          id: String(s.id || uid()),
+          memberId: String(s.memberId || ""),
+          memberName: String(s.memberName || "名称未設定"),
+          itemId: String(s.itemId || ""),
+          itemName: String(s.itemName || "名称未設定"),
+          rawWeight: Number(s.rawWeight) || 0,
+          productWeight: s.productWeight == null || s.productWeight === "" || !Number.isFinite(Number(s.productWeight))
+            ? null : Number(s.productWeight),
+          pauseMs: Number(s.pauseMs) || 0,
+          pauseStartedAt: s.pauseStartedAt || null
+        }))
+      };
+
+      // 旧バックアップで商品側の製品重量がない場合は作業履歴から復元
+      nextDb.items.forEach(item => {
+        if (item.productWeight == null) {
+          const found = [...nextDb.sessions].reverse().find(s => s.itemId === item.id && s.productWeight != null);
+          if (found) item.productWeight = Number(found.productWeight);
+        }
+      });
+
+      db = nextDb;
+      if (save()) {
+        render();
+        alert("バックアップを正常に読み込みました。");
+      } else {
+        db = oldDb;
+      }
+    } catch (err) {
+      db = oldDb;
+      console.error("バックアップ読込エラー:", err);
+      alert("バックアップを読み込めませんでした。\n\n原因：" + (err && err.message ? err.message : "JSON形式またはファイル内容を確認してください。"));
+    } finally {
+      e.target.value = "";
+    }
+  };
+  reader.onerror = () => {
+    alert("ファイルを読み込めませんでした。別の場所に保存してから、もう一度お試しください。");
+    e.target.value = "";
+  };
+  reader.readAsText(file, "UTF-8");
+});
+
+render();
+
+setInterval(()=>{
+  document.querySelectorAll("[data-timer]").forEach(el=>{
+    const s=db.sessions.find(s=>s.id===el.dataset.timer);
+    if(s)el.textContent=duration(work(s));
+  });
+},1000);
+</script>
+</body>
+</html>
